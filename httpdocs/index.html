@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>จัดคิวแบดมินตัน V2.0</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        body { background-color: #f3f4f6; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        ::-webkit-scrollbar { width: 0px; background: transparent; }
+        
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
+        .fade-enter-from, .fade-leave-to { opacity: 0; }
+        .slide-up-enter-active, .slide-up-leave-active { transition: transform 0.3s ease-out; }
+        .slide-up-enter-from, .slide-up-leave-to { transform: translateY(100%); }
+    </style>
+</head>
+<body>
+    <div id="app" class="--max-w-md mx-auto min-h-screen bg-gray-50 flex flex-col relative pb-20">
+        <header class="bg-blue-600 text-white p-4 flex justify-between items-center sticky top-0 z-20 shadow-md">
+            <h1 class="text-xl font-bold">🏸 NoNameNext</h1>
+            <div>
+                <button v-if="!isLoggedIn" @click="showLogin = true" class="text-sm bg-white text-blue-600 px-3 py-1 rounded-full font-semibold">Login</button>
+                <div v-else class="flex items-center gap-2">
+                    <span class="text-sm bg-blue-700 px-2 py-1 rounded">Admin</span>
+                    <button @click="logout" class="text-sm underline">Logout</button>
+                </div>
+            </div>
+        </header>
+
+        <nav class="flex bg-white border-b sticky top-[60px] z-10 shadow-sm">
+            <button @click="activeTab = 'queue'" class="flex-1 py-3 text-sm font-semibold text-center border-b-2 transition-colors" :class="activeTab === 'queue' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'">คิวลงเล่น</button>
+            <button @click="activeTab = 'players'" class="flex-1 py-3 text-sm font-semibold text-center border-b-2 transition-colors" :class="activeTab === 'players' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'">รายชื่อ</button>
+            <button @click="activeTab = 'billing'; fetchBilling()" class="flex-1 py-3 text-sm font-semibold text-center border-b-2 transition-colors" :class="activeTab === 'billing' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'">คิดเงิน</button>
+        </nav>
+
+        <main class="flex-1 p-3">
+            
+            <div v-show="activeTab === 'queue'" class="space-y-4">
+                <div v-if="isLoggedIn" class="flex justify-between items-center bg-blue-50 p-3 rounded-lg border border-blue-100 mb-2">
+                    <div class="flex items-center gap-1 text-xs font-semibold">
+                        <template v-if="isSaving">
+                            <i data-lucide="loader-2" class="w-4 h-4 text-red-500 animate-spin"></i>
+                            <span class="text-red-500">กำลังบันทึก...</span>
+                        </template>
+                        <template v-else>
+                            <i data-lucide="check-circle-2" class="w-4 h-4 text-green-500"></i><span class="text-green-500">บันทึกแล้ว</span>
+                        </template>
+                    </div>
+                    <button @click="undoMatches" :disabled="isSaving" class="bg-orange-500 text-white px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 shadow"><i data-lucide="undo-2" class="w-4 h-4"></i> Undo</button>
+                </div>
+				
+                <!-- Blank State (แสดงเมื่อไม่มีข้อมูล Match ใดๆ เลย) -->
+                <div v-if="isMatchesEmpty" class="flex flex-col items-center justify-center py-12 px-4 opacity-80">
+                    <div class="bg-gray-200 rounded-full p-5 mb-4 shadow-inner">
+                        <i data-lucide="users" class="w-12 h-12 text-gray-400"></i>
+                    </div>
+                    <h3 class="text-gray-500 font-bold text-lg mb-1">ยังไม่มีคิวลงเล่น</h3>
+                    <p class="text-gray-400 text-sm text-center">
+                        {{ isLoggedIn ? 'เริ่มพิมพ์จัดทีมในกล่องด้านล่างได้เลยครับ 👇' : 'รอแอดมินจัดคิวสักครู่นะครับ 🏸' }}
+                    </p>
+                </div>
+
+                <div v-for="(match, index) in matches" :key="index" 
+                     class="border rounded-xl p-3 shadow-sm transition-all"
+                     :class="match.status === 'played' ? 'bg-gray-100 border-gray-300' : 'bg-white border-blue-200 hover:shadow-md'">
+                    
+                    <div class="flex justify-between items-center mb-3 border-b pb-2 cursor-pointer" @click="isLoggedIn ? openMatchModal(match, index) : null">
+                        <span class="font-bold text-gray-500">#{{ index + 1 }}</span>
+                        <div>
+                            <span v-if="match.status === 'queue'" class="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full font-semibold">⏳ รอคิว</span>
+                            <span v-else class="text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded-full font-semibold">✅ เล่นแล้ว</span>
+                        </div>
+                    </div>
+
+                    <div class="flex items-start gap-1">
+                        <div class="flex flex-col gap-2 flex-1 p-1.5 rounded-lg transition-colors duration-300" :class="getTeamBgClass(match.status, match.result, 1)">
+                            <v-player-select v-model="match.p1" :players="suggestedPlayers" :disabled="!isLoggedIn" 
+                                :is-highlighted="isHighlighted(match.p1)" :play-count="getPlayerCount(match.p1, index)"
+                                @focus="setFocusName" @blur="clearFocusName" @save="saveMatches"></v-player-select>
+                            <v-player-select v-model="match.p2" :players="suggestedPlayers" :disabled="!isLoggedIn" 
+                                :is-highlighted="isHighlighted(match.p2)" :play-count="getPlayerCount(match.p2, index)"
+                                @focus="setFocusName" @blur="clearFocusName" @save="saveMatches"></v-player-select>
+                        </div>
+                        
+                        <div class="text-center text-[10px] font-bold text-gray-400 italic mt-6 px-1">VS</div>
+                        
+                        <div class="flex flex-col gap-2 flex-1 p-1.5 rounded-lg transition-colors duration-300" :class="getTeamBgClass(match.status, match.result, 2)">
+                            <v-player-select v-model="match.p3" :players="suggestedPlayers" :disabled="!isLoggedIn" 
+                                :is-highlighted="isHighlighted(match.p3)" :play-count="getPlayerCount(match.p3, index)"
+                                @focus="setFocusName" @blur="clearFocusName" @save="saveMatches"></v-player-select>
+                            <v-player-select v-model="match.p4" :players="suggestedPlayers" :disabled="!isLoggedIn" 
+                                :is-highlighted="isHighlighted(match.p4)" :play-count="getPlayerCount(match.p4, index)"
+                                @focus="setFocusName" @blur="clearFocusName" @save="saveMatches"></v-player-select>
+                        </div>
+                    </div>
+                    
+                    <div v-if="match.status === 'played'" class="mt-3 pt-2 border-t text-xs text-gray-500 flex justify-between cursor-pointer">
+                        <span>ผล: <span class="font-semibold">{{ translateResult(match.result) }}</span></span>
+                        <span v-if="match.shuttles">ลูกแบด: {{ match.shuttles }}</span>
+                    </div>
+                </div>				
+            </div>
+
+            <div v-show="activeTab === 'players'" class="space-y-3">
+                <div v-if="isLoggedIn" class="flex justify-between items-center mb-4">
+                    <h2 class="font-bold text-gray-700">รายชื่อวันนี้ ({{ players.length }})</h2>
+                    <button @click="showAddPlayerModal = true" class="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 shadow">
+                        <i data-lucide="user-plus" class="w-4 h-4"></i> เพิ่มผู้เล่น
+                    </button>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+                    <table class="w-full text-sm">
+                        <thead class="bg-gray-50 text-gray-600 text-left border-b">
+                            <tr>
+                                <th class="p-3">ชื่อ</th>
+                                <th class="p-3 text-center">เล่นไปแล้ว</th>
+                                <th class="p-3 text-center">ลูกแบด</th>
+                                <th class="p-3 text-right">สถานะ</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="(p, idx) in players" :key="idx" 
+                                @click="isLoggedIn ? openPlayerModal(p) : null"
+                                class="border-b last:border-0 transition-colors"
+                                :class="{'bg-gray-100 text-gray-400': p.status === 'left', 'cursor-pointer hover:bg-gray-50': isLoggedIn}">
+                                <td class="p-3 font-semibold">
+                                    {{ p.name }} 
+                                    <span v-if="p.note" class="text-[11px] font-normal text-blue-500 ml-1">({{ p.note }})</span>
+                                </td>
+                                <td class="p-3 text-center">{{ getPlayerPlayCount(p.name) }}</td>
+                                <td class="p-3 text-center">{{ getPlayerShuttleCount(p.name) }}</td>
+                                <td class="p-3 text-right">
+                                    <span v-if="p.status === 'ready'" class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">พร้อมเล่น</span>
+                                    <span v-else class="text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded-full">เลิกแล้ว</span>
+                                </td>
+                            </tr>
+                            <tr v-if="players.length === 0">
+                                <td colspan="4" class="p-4 text-center text-gray-400">ยังไม่มีผู้เล่นลงทะเบียน</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div v-show="activeTab === 'billing'" class="space-y-3">
+                <div class="bg-blue-50 p-3 rounded-lg border border-blue-100 text-sm text-blue-800 mb-4">
+                    <strong>สูตรคิดเงิน:</strong> เริ่มต้น 100 บาท + ค่าลูกแบดเบอร์ละ 25 บาท
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm border overflow-x-auto">
+                    <table class="w-full text-sm whitespace-nowrap">
+                        <thead class="bg-gray-50 text-gray-600 text-left border-b">
+                            <tr>
+                                <th class="p-3 sticky left-0 bg-gray-50 shadow-[1px_0_0_#eee]">ผู้เล่น</th>
+                                <th v-for="i in billingData.max_cols" :key="i" class="p-3 text-center text-xs">
+                                    {{ i }} <br><span class="text-gray-400 font-normal">({{ 100 + (i*25) }})</span>
+                                </th>
+                                <th class="p-3 text-right bg-yellow-50 text-yellow-800">Total</th>
+                                <th v-if="isLoggedIn" class="p-3 text-center">จัดการ</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="(b, idx) in billingData.billing" :key="idx" class="border-b" :class="{'bg-gray-100 opacity-60': b.status === 'left'}">
+                                <td class="p-3 font-semibold sticky left-0 shadow-[1px_0_0_#eee]" :class="b.status === 'left' ? 'bg-gray-100' : 'bg-white'">
+                                    {{ b.name }}
+                                </td>
+                                <td v-for="i in billingData.max_cols" :key="i" class="p-3 text-center border-r border-gray-100">
+                                    <span v-if="b.shuttles[i-1]" class="bg-blue-100 text-blue-800 text-xs px-1.5 py-0.5 rounded">{{ b.shuttles[i-1] }}</span>
+                                </td>
+                                <td class="p-3 text-right font-bold bg-yellow-50/50 text-lg">{{ b.total }}฿</td>
+                                <td v-if="isLoggedIn" class="p-3 text-center">
+                                    <button v-if="b.status !== 'left'" @click="markAsPaid(b.name)" class="text-xs bg-green-500 text-white px-2 py-1 rounded shadow hover:bg-green-600">
+                                        จ่ายเงินแล้ว
+                                    </button>
+                                    <span v-else class="text-xs text-gray-400">จ่ายแล้ว</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </main>
+
+        <div v-if="showMatchModal" class="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center">
+            <div class="bg-white w-full max-w-md sm:rounded-xl rounded-t-xl p-5 shadow-2xl transform transition-transform">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-bold">จัดการ Match #{{ editingMatchIndex + 1 }}</h2>
+                    <button @click="showMatchModal = false" class="p-1 hover:bg-gray-100 rounded-full transition-colors"><i data-lucide="x" class="text-gray-500 w-5 h-5"></i></button>
+                </div>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="text-sm font-semibold text-gray-600 block mb-2">สถานะการเล่น</label>
+                        <div class="flex gap-2">
+                            <button @click="editingMatch.status = 'queue'" class="flex-1 py-2 rounded-lg border-2 transition-colors font-semibold text-sm"
+                                :class="editingMatch.status === 'queue' ? 'border-yellow-500 bg-yellow-50 text-yellow-700' : 'border-gray-200 text-gray-500'">
+                                ⏳ รอคิว
+                            </button>
+                            <button @click="editingMatch.status = 'played'" class="flex-1 py-2 rounded-lg border-2 transition-colors font-semibold text-sm"
+                                :class="editingMatch.status === 'played' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 text-gray-500'">
+                                ✅ เล่นแล้ว
+                            </button>
+                        </div>
+                    </div>
+
+                    <div v-if="editingMatch.status === 'played'" class="space-y-4 p-4 bg-gray-50 rounded-lg border">
+                        <div>
+                            <label class="text-sm font-semibold text-gray-600 block mb-2">ผลการแข่งขัน</label>
+                            <select v-model="editingMatch.result" class="w-full border rounded p-2 text-sm outline-none focus:ring-2 focus:ring-blue-400">
+                                <option value="no-data">ไม่ระบุ (No Data)</option>
+                                <option value="win-t1">ทีมซ้าย ชนะ</option>
+                                <option value="win-t2">ทีมขวา ชนะ</option>
+                                <option value="draw">เสมอ</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-sm font-semibold text-gray-600 block mb-1">เบอร์ลูกแบดที่ใช้</label>
+                            <p class="text-xs text-gray-400 mb-2">กรอกตัวเลขคั่นด้วยลูกน้ำ เช่น 1, 5, 12</p>
+                            <input type="text" v-model="editingMatch.shuttles" placeholder="เช่น 1, 2, 3" class="w-full border rounded p-2 text-sm outline-none focus:ring-2 focus:ring-blue-400">
+                        </div>
+                    </div>
+
+                    <button @click="saveMatchModal" class="w-full bg-blue-600 text-white py-3 rounded-lg font-bold shadow-md mt-4">บันทึกข้อมูล Match</button>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="showAddPlayerModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div class="bg-white w-full max-w-sm rounded-xl p-5 shadow-2xl">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-bold">เพิ่มผู้เล่นใหม่</h2>
+                    <button @click="showAddPlayerModal = false" class="p-1 hover:bg-gray-100 rounded-full transition-colors"><i data-lucide="x" class="text-gray-500 w-5 h-5"></i></button>
+                </div>
+                <input type="text" v-model="newPlayerName" placeholder="พิมพ์ชื่อผู้เล่น..." class="w-full border rounded p-3 mb-2 focus:ring-2 focus:ring-blue-400 outline-none">
+                <input type="text" v-model="newPlayerNote" placeholder="หมายเหตุ (เช่น 19:00, มาสาย)" @keyup.enter="addPlayer" class="w-full border rounded p-3 mb-4 focus:ring-2 focus:ring-blue-400 outline-none">
+                <div class="flex gap-2">
+                    <button @click="showAddPlayerModal = false" class="flex-1 p-2 bg-gray-200 rounded font-semibold text-sm">ยกเลิก</button>
+                    <button @click="addPlayer" class="flex-1 p-2 bg-blue-600 text-white rounded font-semibold text-sm">เพิ่มรายชื่อ</button>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="showEditPlayerModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div class="bg-white w-full max-w-sm rounded-xl p-5 shadow-2xl">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-bold">จัดการผู้เล่น: <span class="text-blue-600">{{ editingPlayer.name }}</span></h2>
+                    <button @click="showEditPlayerModal = false" class="p-1 hover:bg-gray-100 rounded-full transition-colors"><i data-lucide="x" class="text-gray-500 w-5 h-5"></i></button>
+                </div>
+                
+                <div class="space-y-3">
+                    <div>
+                        <label class="text-sm font-semibold text-gray-600 block mb-1">หมายเหตุ</label>
+                        <input type="text" v-model="editingPlayer.note" placeholder="เช่น 19:00" class="w-full border rounded p-3 focus:ring-2 focus:ring-blue-400 outline-none text-sm">
+                    </div>
+
+                    <button @click="togglePlayerStatus" class="w-full py-3 rounded-lg border-2 font-semibold text-sm transition-colors mt-2"
+                        :class="editingPlayer.status === 'ready' ? 'border-gray-300 text-gray-700 bg-gray-50' : 'border-green-500 text-green-700 bg-green-50'">
+                        {{ editingPlayer.status === 'ready' ? '❌ ทำเครื่องหมายว่า เลิกเล่นแล้ว' : '✅ ทำเครื่องหมายว่า พร้อมเล่น' }}
+                    </button>
+                    
+                    <button @click="deletePlayer" class="w-full py-3 rounded-lg bg-red-100 text-red-600 font-semibold text-sm hover:bg-red-200">
+                        🗑 ลบผู้เล่นนี้ออกจากระบบ
+                    </button>
+                </div>
+                
+                <button @click="saveEditPlayerModal" class="w-full mt-4 p-3 bg-gray-800 text-white rounded-lg font-semibold text-sm">บันทึก & ปิดหน้าต่าง</button>
+            </div>
+        </div>
+
+        <div v-if="showLogin" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-xl p-6 w-full max-w-sm shadow-2xl">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold">เข้าสู่ระบบ Admin</h2>
+                    <button @click="showLogin = false" class="p-1 hover:bg-gray-100 rounded-full transition-colors"><i data-lucide="x" class="text-gray-500 w-5 h-5"></i></button>
+                </div>
+                <form @submit.prevent="login">
+                    <input type="text" v-model="loginForm.username" placeholder="Username" class="w-full border rounded p-3 mb-3">
+                    <input type="password" v-model="loginForm.password" placeholder="Password" class="w-full border rounded p-3 mb-4">
+                    <div class="flex gap-2">
+                        <button type="button" @click="showLogin = false" class="flex-1 p-3 bg-gray-200 rounded font-semibold">ยกเลิก</button>
+                        <button type="submit" class="flex-1 p-3 bg-blue-600 text-white rounded font-semibold">Login</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, watch, onMounted, nextTick, provide, inject } = Vue;
+
+        const PlayerSelect = {
+            props: ['modelValue', 'players', 'disabled', 'isHighlighted', 'playCount'],
+            emits: ['update:modelValue', 'save', 'focus', 'blur'],
+            template: `
+                <div class="relative w-full" ref="container">
+                    <input 
+                        type="text" 
+                        :value="modelValue"
+                        @input="onInput"
+                        @focus="onFocus"
+                        @blur="onBlur"
+                        :disabled="disabled"
+                        placeholder="ผู้เล่น"
+                        class="w-full border rounded p-2 text-sm outline-none disabled:bg-transparent disabled:border-none disabled:p-0 disabled:font-semibold disabled:text-gray-800 transition-colors"
+                        :class="isHighlighted ? 'border-red-500 border-2 bg-white' : 'border-gray-300 focus:ring-2 focus:ring-blue-400 bg-transparent'"
+                    >
+                    <span v-if="modelValue && playCount !== ''" class="absolute right-1 top-2 text-[10px] bg-blue-100 text-blue-800 px-1.5 rounded-full pointer-events-none">
+                        {{ playCount }}
+                    </span>
+                    <div v-if="open && !disabled" class="absolute z-30 w-full mt-1 bg-white border rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                        <div v-if="filteredPlayers.suggest.length > 0" class="px-2 py-1 bg-blue-50 text-xs font-bold text-blue-700 sticky top-0">⭐️ แนะนำ (ลงเล่นน้อยสุด)</div>
+                        <ul>
+                            <li v-for="p in filteredPlayers.suggest" :key="'s'+p.name" @mousedown.prevent="select(p.name)" class="p-2 text-sm hover:bg-blue-100 cursor-pointer border-b border-gray-50">{{ p.name }} ({{ p.count }})</li>
+                        </ul>
+                        
+                        <div v-if="filteredPlayers.other.length > 0" class="px-2 py-1 bg-gray-100 text-xs font-bold text-gray-600 sticky top-0">ผู้เล่นอื่นๆ</div>
+                        <ul>
+                            <li v-for="p in filteredPlayers.other" :key="'o'+p.name" @mousedown.prevent="select(p.name)" class="p-2 text-sm hover:bg-gray-100 cursor-pointer border-b border-gray-50">{{ p.name }} ({{ p.count }})</li>
+                        </ul>
+                        
+                        <div v-if="filteredPlayers.suggest.length === 0 && filteredPlayers.other.length === 0" class="p-3 text-center text-xs text-gray-400">ไม่พบรายชื่อ</div>
+                    </div>
+                </div>
+            `,
+            setup(props, { emit }) {
+                const open = ref(false);
+                const search = ref('');
+
+                const onInput = (e) => {
+                    search.value = e.target.value;
+                    emit('update:modelValue', e.target.value);
+                    emit('focus', e.target.value); 
+                    open.value = true;
+                };
+
+                const onFocus = () => {
+                    emit('focus', props.modelValue);
+                    open.value = true;
+                };
+
+                const onBlur = () => {
+                    open.value = false;
+                    emit('blur'); 
+                    emit('save'); 
+                };
+
+                const select = (name) => {
+                    emit('update:modelValue', name);
+                    search.value = '';
+                    open.value = false;
+                    emit('blur'); 
+                    emit('save'); 
+                };
+				
+				const getPlayerPlayCount = inject('getPlayerPlayCount');
+
+                const filteredPlayers = computed(() => {
+                    const term = (search.value || props.modelValue || '').toLowerCase();
+                    const filterFn = (name) => name.toLowerCase().includes(term);
+					const mapFn = (name) => ({
+						name,
+						count: getPlayerPlayCount(name),
+					});
+					
+					console.log('props.players', props.players)
+                    
+                    return {
+                        suggest: props.players.suggest.filter(filterFn).map(mapFn),
+                        other: props.players.other.filter(filterFn).map(mapFn),
+                    };
+                });
+
+                return { open, search, onInput, onFocus, onBlur, select, filteredPlayers };
+            }
+        };
+
+        const api = axios.create({
+            baseURL: 'https://api.nonamenext.com/v1',
+            withCredentials: true 
+        });
+
+        const app = createApp({
+            setup() {
+                const isLoggedIn = ref(false);
+                const showLogin = ref(false);
+                const isSaving = ref(false);
+                const activeTab = ref('queue'); 
+                const loginForm = ref({ username: '', password: '' });
+
+                const matches = ref([]);
+                const players = ref([]);
+                const billingData = ref({ billing: [], max_cols: 8 });
+                const focusedName = ref('');
+
+                const showMatchModal = ref(false);
+                const editingMatchIndex = ref(-1);
+                const editingMatch = ref({});
+
+                const showAddPlayerModal = ref(false);
+                const newPlayerName = ref('');
+                const newPlayerNote = ref('');
+                
+                const showEditPlayerModal = ref(false);
+                const editingPlayer = ref({});
+
+                const getEmptyMatch = () => ({ p1:'', p2:'', p3:'', p4:'', status:'queue', result:'no-data', shuttles:'' });
+
+                // เช็กเงื่อนไขว่า Matches ว่างเปล่าหรือไม่ (เพื่อโชว์ Blank State)
+                const isMatchesEmpty = computed(() => {
+                    if (matches.value.length === 0) return true;
+                    // หาก Admin ล็อกอินอยู่ จะมีแถวว่างๆ เกิดขึ้นมา 1 แถวเสมอ ให้ถือว่ายังเป็น Blank State
+                    if (matches.value.length === 1) {
+                        const m = matches.value[0];
+                        if (!m.p1.trim() && !m.p2.trim() && !m.p3.trim() && !m.p4.trim() && m.status === 'queue') {
+                            return true;
+                        }
+                    }
+                    return false;
+                });
+
+                const isAnyModalOpen = computed(() => showMatchModal.value || showAddPlayerModal.value || showEditPlayerModal.value || showLogin.value);
+
+                watch(isAnyModalOpen, (newVal, oldVal) => {
+                    if (newVal) {
+                        nextTick(() => lucide.createIcons()); 
+                        if (!oldVal) {
+                            window.history.pushState({ modalOpen: true }, '');
+                        }
+                    } else if (!newVal && oldVal) {
+                        if (window.history.state && window.history.state.modalOpen) {
+                            window.history.back();
+                        }
+                    }
+                });
+
+                const closeAllModals = () => {
+                    showMatchModal.value = false;
+                    showAddPlayerModal.value = false;
+                    showEditPlayerModal.value = false;
+                    showLogin.value = false;
+                };
+
+                const setFocusName = (name) => { focusedName.value = name ? name.trim().toLowerCase() : ''; };
+                const clearFocusName = () => { focusedName.value = ''; };
+                const isHighlighted = (name) => {
+                    if (!name || !focusedName.value) return false;
+                    return name.trim().toLowerCase() === focusedName.value;
+                };
+
+                const getTeamBgClass = (status, result, team) => {
+                    if (status !== 'played') return 'bg-transparent';
+                    if (result === 'draw') return 'bg-yellow-100/60';
+                    if (team === 1) {
+                        if (result === 'win-t1') return 'bg-green-100/60';
+                        if (result === 'win-t2') return 'bg-red-100/60';
+                    } else if (team === 2) {
+                        if (result === 'win-t2') return 'bg-green-100/60';
+                        if (result === 'win-t1') return 'bg-red-100/60';
+                    }
+                    return 'bg-gray-100/50';
+                };
+
+                const getPlayerCount = (playerName, currentIndex) => {
+                    if (!playerName) return '';
+                    let count = 0;
+                    const name = playerName.trim().toLowerCase();
+                    for (let i = 0; i <= currentIndex; i++) {
+                        const m = matches.value[i];
+                        if (m.p1.trim().toLowerCase() === name || m.p2.trim().toLowerCase() === name || 
+                            m.p3.trim().toLowerCase() === name || m.p4.trim().toLowerCase() === name) {
+                            count++;
+                        }
+                    }
+                    return count;
+                };
+
+                const checkAuth = async () => { 
+                    try {
+                        const res = await api.get('/auth/me');
+                        isLoggedIn.value = res.data.logged_in;
+                    } catch (error) {
+                        isLoggedIn.value = false;
+                    }
+                };
+
+                const login = async () => { 
+                    try {
+                        const res = await api.post('/auth/login', loginForm.value);
+                        if (res.data.success) {
+                            isLoggedIn.value = true;
+                            showLogin.value = false;
+                            loginForm.value = { username: '', password: '' };
+                            await fetchAll();
+                        }
+                    } catch (error) {
+                        alert('รหัสผ่านไม่ถูกต้อง');
+                    }
+                };
+
+                const logout = async () => { 
+                    try {
+                        await api.post('/auth/logout');
+                        isLoggedIn.value = false;
+                        matches.value = matches.value.filter(m => m.p1.trim() || m.p2.trim() || m.p3.trim() || m.p4.trim());
+                    } catch (error) {
+                        console.error('Logout error', error);
+                    }
+                };
+
+                const fetchAll = async () => {
+                    try {
+                        const resM = await api.get('/matches/today');
+                        matches.value = resM.data.matches || [];
+                        
+                        const resP = await api.get('/players/today');
+                        players.value = resP.data.players || [];
+                    } catch (error) {
+                        console.error('Error fetching data:', error);
+                    } finally {
+                        ensureEmptyMatchRow();
+                        nextTick(() => lucide.createIcons());
+                    }
+                };
+
+                const saveMatches = async () => {
+                    if (!isLoggedIn.value) return;
+                    isSaving.value = true;
+                    const data = matches.value.filter(m => m.p1.trim() || m.p2.trim() || m.p3.trim() || m.p4.trim() || m.status !== 'queue');
+                    try {
+                        await api.post('/matches/save', { matches: data });
+                    } catch (error) {
+                        console.error('Save match error', error);
+                    } finally {
+                        isSaving.value = false;
+                    }
+                };
+
+                const savePlayers = async () => {
+                    try {
+                        await api.post('/players/save', { players: players.value });
+                    } catch (error) {
+                        console.error('Save players error', error);
+                    }
+                };
+
+                const ensureEmptyMatchRow = () => {
+                    if (!isLoggedIn.value) return;
+                    if (matches.value.length === 0 || 
+                        (matches.value[matches.value.length-1].p1 !== '' || matches.value[matches.value.length-1].p2 !== '')) {
+                        matches.value.push(getEmptyMatch());
+                    }
+                };
+
+                watch(matches, ensureEmptyMatchRow, { deep: true });
+
+                const openMatchModal = (match, index) => {
+                    editingMatchIndex.value = index;
+                    editingMatch.value = JSON.parse(JSON.stringify(match)); 
+                    showMatchModal.value = true;
+                };
+
+                const saveMatchModal = () => {
+                    matches.value[editingMatchIndex.value] = editingMatch.value;
+                    showMatchModal.value = false; 
+                    saveMatches();
+                };
+
+                const translateResult = (val) => {
+                    const map = { 'win-t1': 'ทีมซ้ายชนะ', 'win-t2': 'ทีมขวาชนะ', 'draw': 'เสมอ', 'no-data': 'ไม่ระบุ' };
+                    return map[val] || '';
+                };
+
+                const getPlayerPlayCount = (name) => {
+                    if(!name) return 0;
+                    let count = 0;
+                    matches.value.forEach(m => {
+                        if(m.status === 'played' && (m.p1===name || m.p2===name || m.p3===name || m.p4===name)) count++;
+                    });
+                    return count;
+                };
+				provide('getPlayerPlayCount', getPlayerPlayCount);
+
+                const getPlayerShuttleCount = (name) => {
+                    if(!name) return 0;
+                    let shuttles = [];
+                    matches.value.forEach(m => {
+                        if(m.status === 'played' && m.shuttles && (m.p1===name || m.p2===name || m.p3===name || m.p4===name)) {
+                            const list = m.shuttles.split(/[\s,]+/).filter(Boolean);
+                            shuttles.push(...list);
+                        }
+                    });
+                    return [...new Set(shuttles)].length; 
+                };
+
+                const suggestedPlayers = computed(() => {
+                    const readyPlayers = players.value.filter(p => p.status === 'ready').map(p => p.name);
+                    if(readyPlayers.length === 0) return { suggest: [], other: [] };
+
+                    const counts = {};
+                    readyPlayers.forEach(p => counts[p] = getPlayerPlayCount(p));
+                    
+                    const minCount = Math.min(...Object.values(counts));
+                    
+                    const suggest = [];
+                    const other = [];
+                    readyPlayers.forEach(p => {
+                        if(counts[p] === minCount) suggest.push(p);
+                        else other.push(p);
+                    });
+
+                    other.sort((a,b) => a.localeCompare(b, 'th'));
+
+                    return { suggest, other };
+                });
+
+                const addPlayer = () => {
+                    if(!newPlayerName.value.trim()) return;
+                    players.value.push({ 
+                        name: newPlayerName.value.trim(), 
+                        status: 'ready',
+                        note: newPlayerNote.value.trim() 
+                    });
+                    newPlayerName.value = '';
+                    newPlayerNote.value = '';
+                    showAddPlayerModal.value = false;
+                    savePlayers();
+                };
+
+                const openPlayerModal = (p) => {
+                    editingPlayer.value = JSON.parse(JSON.stringify(p)); 
+                    showEditPlayerModal.value = true;
+                };
+
+                const saveEditPlayerModal = () => {
+                    const index = players.value.findIndex(x => x.name === editingPlayer.value.name);
+                    if (index > -1) {
+                        players.value[index] = editingPlayer.value;
+                    }
+                    showEditPlayerModal.value = false;
+                    savePlayers(); 
+                };
+
+                const togglePlayerStatus = () => {
+                    editingPlayer.value.status = editingPlayer.value.status === 'ready' ? 'left' : 'ready';
+                };
+
+                const deletePlayer = () => {
+                    if(confirm(`คุณต้องการลบรายชื่อ "${editingPlayer.value.name}" ใช่หรือไม่?`)) {
+                        players.value = players.value.filter(p => p.name !== editingPlayer.value.name);
+                        showEditPlayerModal.value = false;
+                        savePlayers(); 
+                    }
+                };
+
+                const fetchBilling = async () => {
+                    try {
+                        const res = await api.get('/billing/today');
+                        if(res.data) {
+                            billingData.value = res.data;
+                        }
+                    } catch (error) {
+                        console.error('Error fetching billing:', error);
+                    }
+                };
+
+                const markAsPaid = async (playerName) => {
+                    if(confirm(`ยืนยันการจ่ายเงินของ ${playerName} ใช่หรือไม่?`)) {
+                        try {
+                            await api.post('/billing/pay', { playerName });
+                            await fetchAll();
+                            await fetchBilling();
+                        } catch (error) {
+                            alert('ไม่สามารถอัปเดตสถานะการจ่ายเงินได้');
+                        }
+                    }
+                };
+
+                const undoMatches = async () => { 
+                    if (confirm('คุณต้องการย้อนกลับการบันทึก Match ก่อนหน้าใช่หรือไม่?')) {
+                        isSaving.value = true;
+                        try {
+                            await api.post('/matches/undo');
+                            await fetchAll();
+                        } catch (error) {
+                            alert(error.response?.data?.error || 'ไม่สามารถ Undo ได้');
+                        } finally {
+                            isSaving.value = false;
+                        }
+                    }
+                };
+
+                onMounted(async () => {
+                    await checkAuth();
+                    await fetchAll();
+
+                    window.addEventListener('popstate', () => {
+                        closeAllModals(); 
+                    });
+                });
+
+                return {
+                    isLoggedIn, showLogin, loginForm, isSaving, activeTab,
+                    matches, players, billingData, isMatchesEmpty,
+                    showMatchModal, editingMatchIndex, editingMatch, openMatchModal, saveMatchModal, translateResult,
+                    showAddPlayerModal, newPlayerName, newPlayerNote, addPlayer,
+                    showEditPlayerModal, editingPlayer, openPlayerModal, saveEditPlayerModal, togglePlayerStatus, deletePlayer,
+                    getPlayerCount, getPlayerPlayCount, getPlayerShuttleCount, suggestedPlayers, saveMatches,
+                    setFocusName, clearFocusName, isHighlighted, getTeamBgClass,
+                    fetchBilling, markAsPaid, login, logout, undoMatches
+                };
+            }
+        });
+
+        app.component('v-player-select', PlayerSelect);
+        app.mount('#app');
+    </script>
+</body>
+</html>

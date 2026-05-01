@@ -1,0 +1,13 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    
+    # กำหนด Base URL เป็น /v1/
+    RewriteBase /v1/
+
+    # ถ้าเป็นการเรียกไฟล์หรือโฟลเดอร์ที่มีอยู่จริงบน Server ให้ข้ามไปไม่ต้อง Rewrite
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+
+    # ถ้าไม่ใช่ ให้โยน Request ทั้งหมดไปที่ไฟล์ index.php
+    RewriteRule ^(.*)$ index.php [QSA,L]
+</IfModule>
