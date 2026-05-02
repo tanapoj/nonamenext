@@ -52,6 +52,20 @@
                         </button>
                     </div>
                 </form>
+
+                <div class="relative flex py-6 items-center">
+                    <div class="flex-grow border-t border-gray-200"></div>
+                    <span class="flex-shrink-0 mx-4 text-gray-400 text-sm font-medium">หรือ</span>
+                    <div class="flex-grow border-t border-gray-200"></div>
+                </div>
+
+                <!-- LINE Login Button -->
+                <a href="https://api.nonamenext.com/line/auth" class="w-full flex items-center justify-center gap-2 bg-[#06C755] text-white py-3 rounded-lg font-bold shadow-lg hover:bg-[#05b34c] active:scale-[0.98] transition-all">
+                    <svg viewBox="0 0 24 24" class="w-6 h-6 fill-current">
+                        <path d="M22.5 10.4c0-4.6-4.7-8.3-10.5-8.3S1.5 5.8 1.5 10.4c0 4.1 3.7 7.6 8.7 8.2.4.1.9.3 1 .6l.3 1.8c0 .1.1.2.2.1.2 0 2.2-1.2 3.6-2.5 1.7-1.5 3.2-3.2 4.2-5.3.8-1.5 1-3.2 1-3.2v.3zm-14.7 3.2c-.3 0-.6-.3-.6-.6V9.4c0-.3.3-.6.6-.6s.6.3.6.6v3.1h2.2c.3 0 .6.3.6.6s-.3.6-.6.6H7.8zm6.5 0c-.3 0-.6-.3-.6-.6V9.4c0-.3.3-.6.6-.6s.6.3.6.6v3.6h-.6zm2.8 0c-.3 0-.6-.3-.6-.6v-2.3l-2 2.7c-.1.1-.3.2-.4.2h-.1c-.3 0-.6-.3-.6-.6V9.4c0-.3.3-.6.6-.6s.6.3.6.6v2.3l2-2.7c.1-.1.3-.2.4-.2h.1c.3 0 .6.3.6.6v3.6h-.6zM12 13.6c-.3 0-.6-.3-.6-.6V9.4c0-.3.3-.6.6-.6s.6.3.6.6v3.6h-.6z"></path>
+                    </svg>
+                    เข้าสู่ระบบด้วย LINE
+                </a>
             </div>
 
             <!-- User Profile (แสดงเมื่อ Login แล้ว) -->
@@ -90,11 +104,25 @@
 
         createApp({
             setup() {
-                const initLoading = ref(true); // ใช้เช็กสถานะตอนโหลดหน้าครั้งแรก
+                const initLoading = ref(true);
                 const isLoggedIn = ref(false);
                 const loading = ref(false);
                 const loginForm = ref({ username: '', password: '' });
                 const userData = ref({});
+
+                // ตรวจสอบ Error จาก URL ที่ Redirect กลับมาจาก LINE
+                const checkUrlErrors = () => {
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const error = urlParams.get('error');
+                    
+                    if (error === 'line_not_found') {
+                        setTimeout(() => alert('ไม่สามารถเข้าสู่ระบบได้! บัญชี LINE นี้ยังไม่ได้ผูกกับผู้ใช้ในระบบ กรุณาเข้าสู่ระบบด้วย Username/Password เพื่อผูกบัญชีก่อน'), 500);
+                        window.history.replaceState(null, '', window.location.pathname);
+                    } else if (error === 'line_login_failed') {
+                        setTimeout(() => alert('การเข้าสู่ระบบด้วย LINE ล้มเหลว โปรดลองใหม่อีกครั้ง'), 500);
+                        window.history.replaceState(null, '', window.location.pathname);
+                    }
+                };
 
                 const checkAuth = async () => {
                     initLoading.value = true;
@@ -111,6 +139,9 @@
                     } finally {
                         initLoading.value = false;
                         nextTick(() => lucide.createIcons());
+                        if (!isLoggedIn.value) {
+                            checkUrlErrors();
+                        }
                     }
                 };
 
@@ -123,6 +154,7 @@
                             userData.value = { username: res.data.username };
                             loginForm.value = { username: '', password: '' }; // ล้างฟอร์ม
                             nextTick(() => lucide.createIcons());
+                            // window.location.href = '/'; // ล็อกอินสำเร็จกลับหน้าหลักเลย
                         }
                     } catch (error) {
                         alert('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');

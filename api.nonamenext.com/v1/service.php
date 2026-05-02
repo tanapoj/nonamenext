@@ -47,6 +47,14 @@ function get_all_players_data() {
 	return $users;
 }
 
+function get_user($id) {
+    $db = getDB();
+    $stmt = $db->prepare("SELECT id, username, role, lineUserId, displayName, created_at FROM users WHERE id = ?");
+    $stmt->execute([$id]);
+    $user = $stmt->fetch();
+	return $user ? $user : null;
+}
+
 function get_today_players_data() {
     $db = getDB();
     $stmt = $db->prepare("SELECT player_data FROM player_snapshots ORDER BY id DESC LIMIT 1");

@@ -5,12 +5,13 @@ ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
-session_start();
+session_start(['cookie_domain' => '.nonamenext.com']);
 
 // จัดการ CORS ให้รองรับ www และ non-www และ Credentials (Session)
 $allowed_origins = [
     'https://nonamenext.com',
     'https://www.nonamenext.com',
+    'https://api.nonamenext.com',
     'http://localhost:5500', // สำหรับเทสในเครื่อง
     'http://127.0.0.1:5500'
 ];
@@ -48,7 +49,11 @@ function res_json($data, $status = 200) { return new MyJsonResponse($data, $stat
 
 function getUser() {
     if (isset($_SESSION['user_id'])) {
-        return ['id' => $_SESSION['user_id'], 'username' => $_SESSION['username']];
+        $user = get_user($_SESSION['user_id']);
+        if ($user) {
+            return $user;
+            // return ['id' => $_SESSION['user_id'], 'username' => $_SESSION['username']];
+        }
     }
     return null;
 }
@@ -110,7 +115,7 @@ require 'service.php';
 // --- AUTH ---
 $app->get('/auth/me', function() {
     $user = getUser();
-    return $user ? res_json(['logged_in' => true, 'username' => $user['username']]) : res_json(['logged_in' => false], 401);
+    return $user ? res_json(['logged_in' => true] + $user) : res_json(['logged_in' => false, '_SESSION' => $_SESSION], 401);
 });
 
 $app->post('/auth/login', function($req) {
@@ -177,7 +182,7 @@ $app->get('/players/today', function() {
     usort($player_data, function($a, $b) use($coll) {
         return $coll->compare($a['name'], $b['name']);
     });
-    
+
     return res_json(['players' => $player_data]);
 });
 
