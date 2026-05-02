@@ -159,23 +159,25 @@ $app->post('/matches/undo', function() {
 $app->get('/players', function() {
     $user = getUser();
     if (!$user) return res_json(['error' => 'Unauthorized'], 401);
+    
+    $player_data = get_all_players_data();
 
-    $db = getDB();
-    // ดึงเฉพาะคนที่มี displayName ไม่เป็นค่าว่าง และไม่ใช่ค่า Default
-    $stmt = $db->query("SELECT id, username, role, displayName FROM users WHERE displayName IS NOT NULL AND displayName != '' AND displayName != '---' ORDER BY displayName ASC");
-    $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    // แปลง Array จากรูปแบบ [["displayName" => "A"], ["displayName" => "B"]] เป็น ["A", "B"]
-    // $names = array_column($users, 'displayName');
-    
-    return res_json(['users' => $users]);
+    $coll = new Collator('th_TH');
+    usort($player_data, function($a, $b) use($coll) {
+        return $coll->compare($a['displayName'], $b['displayName']);
+    });
+
+    return res_json(['players' => $player_data]);
 });
 
 $app->get('/players/today', function() {
 	$player_data = get_today_players_data();
-	usort($player_data, function($a, $b){
-		return $a['name'] <=> $b['name'];
-	});
+
+    $coll = new Collator('th_TH');
+    usort($player_data, function($a, $b) use($coll) {
+        return $coll->compare($a['name'], $b['name']);
+    });
+    
     return res_json(['players' => $player_data]);
 });
 

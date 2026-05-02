@@ -40,6 +40,13 @@ function undo_today_matches_data() {
     return false;
 }
 
+function get_all_players_data() {
+    $db = getDB();
+    $stmt = $db->query("SELECT id, username, role, displayName FROM users WHERE displayName IS NOT NULL AND displayName != '' AND displayName != '---' ORDER BY displayName ASC");
+    $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+	return $users;
+}
+
 function get_today_players_data() {
     $db = getDB();
     $stmt = $db->prepare("SELECT player_data FROM player_snapshots ORDER BY id DESC LIMIT 1");
