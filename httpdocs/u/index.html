@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>จัดการบัญชีผู้ใช้ - NoNameNext</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        body { background-color: #f3f4f6; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
+    <div id="app" class="w-full max-w-sm">
+        <div class="text-center mb-8">
+            <h1 class="text-3xl font-extrabold text-blue-600">🏸 NoNameNext</h1>
+            <p class="text-gray-500 mt-2">ระบบจัดการบัญชีผู้ใช้</p>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-xl p-8 relative overflow-hidden min-h-[300px]">
+            
+            <!-- Loading State -->
+            <div v-if="initLoading" class="absolute inset-0 bg-white flex items-center justify-center z-10">
+                <div class="flex flex-col items-center gap-2">
+                    <i data-lucide="loader-2" class="w-8 h-8 text-blue-500 animate-spin"></i>
+                    <span class="text-sm text-gray-400 font-semibold">กำลังตรวจสอบ...</span>
+                </div>
+            </div>
+
+            <!-- Login Form (แสดงเมื่อยังไม่ Login) -->
+            <div v-else-if="!isLoggedIn" class="animate-fade-in">
+                <h2 class="text-xl font-bold text-gray-800 mb-6">เข้าสู่ระบบ</h2>
+                
+                <form @submit.prevent="login" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-600 mb-1">Username</label>
+                        <input type="text" v-model="loginForm.username" required
+                            class="w-full border border-gray-300 rounded-lg p-3 outline-none focus:ring-2 focus:ring-blue-400 transition-all">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-600 mb-1">Password</label>
+                        <input type="password" v-model="loginForm.password" required
+                            class="w-full border border-gray-300 rounded-lg p-3 outline-none focus:ring-2 focus:ring-blue-400 transition-all">
+                    </div>
+                    
+                    <div class="pt-2">
+                        <button type="submit" :disabled="loading"
+                            class="w-full bg-blue-600 text-white py-3 rounded-lg font-bold shadow-lg hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-50">
+                            {{ loading ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ' }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- User Profile (แสดงเมื่อ Login แล้ว) -->
+            <div v-else class="animate-fade-in">
+                <h2 class="text-xl font-bold text-gray-800 mb-6">ข้อมูลผู้ใช้</h2>
+                
+                <div class="flex items-center gap-4 mb-8 pb-6 border-b border-gray-100">
+                    <div class="bg-blue-100 p-4 rounded-full text-blue-600">
+                        <i data-lucide="user" class="w-8 h-8"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-bold text-gray-800">{{ userData.username }}</h3>
+                        <span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">Admin</span>
+                    </div>
+                </div>
+                
+                <div class="space-y-3">
+                    <button @click="logout" :disabled="loading" 
+                        class="w-full flex items-center justify-center gap-2 bg-red-50 text-red-600 py-3 rounded-lg font-bold hover:bg-red-100 active:scale-[0.98] transition-all disabled:opacity-50 border border-red-100">
+                        <i data-lucide="log-out" class="w-4 h-4"></i> {{ loading ? 'กำลังออกจากระบบ...' : 'ออกจากระบบ' }}
+                    </button>
+                </div>
+            </div>
+            
+            <div class="mt-6 text-center">
+                <a href="/" class="text-sm text-gray-400 hover:text-blue-500 flex items-center justify-center gap-1 transition-colors">
+                    <i data-lucide="arrow-left" class="w-4 h-4"></i> กลับหน้าหลักจัดคิว
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted, nextTick } = Vue;
+        const api = axios.create({ baseURL: 'https://api.nonamenext.com/v1', withCredentials: true });
+
+        createApp({
+            setup() {
+                const initLoading = ref(true); // ใช้เช็กสถานะตอนโหลดหน้าครั้งแรก
+                const isLoggedIn = ref(false);
+                const loading = ref(false);
+                const loginForm = ref({ username: '', password: '' });
+                const userData = ref({});
+
+                const checkAuth = async () => {
+                    initLoading.value = true;
+                    try {
+                        const res = await api.get('/auth/me');
+                        if (res.data.logged_in) {
+                            isLoggedIn.value = true;
+                            userData.value = { username: res.data.username };
+                        } else {
+                            isLoggedIn.value = false;
+                        }
+                    } catch (error) {
+                        isLoggedIn.value = false;
+                    } finally {
+                        initLoading.value = false;
+                        nextTick(() => lucide.createIcons());
+                    }
+                };
+
+                const login = async () => {
+                    loading.value = true;
+                    try {
+                        const res = await api.post('/auth/login', loginForm.value);
+                        if (res.data.success) {
+                            isLoggedIn.value = true;
+                            userData.value = { username: res.data.username };
+                            loginForm.value = { username: '', password: '' }; // ล้างฟอร์ม
+                            nextTick(() => lucide.createIcons());
+                        }
+                    } catch (error) {
+                        alert('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+
+                const logout = async () => {
+                    if (!confirm("คุณต้องการออกจากระบบใช่หรือไม่?")) return;
+                    
+                    loading.value = true;
+                    try {
+                        await api.post('/auth/logout');
+                        isLoggedIn.value = false;
+                        userData.value = {};
+                        nextTick(() => lucide.createIcons());
+                    } catch (error) {
+                        alert('เกิดข้อผิดพลาดในการออกจากระบบ');
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+
+                onMounted(() => {
+                    checkAuth();
+                });
+
+                return { 
+                    initLoading, isLoggedIn, loginForm, loading, userData, 
+                    login, logout 
+                };
+            }
+        }).mount('#app');
+    </script>
+
+    <style>
+        .animate-fade-in {
+            animation: fadeIn 0.3s ease-out forwards;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</body>
+</html>

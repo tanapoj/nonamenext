@@ -19,14 +19,33 @@
     </style>
 </head>
 <body>
-    <div id="app" class="--max-w-md mx-auto min-h-screen bg-gray-50 flex flex-col relative pb-20">
+    <div id="app" class="max-w-md mx-auto min-h-screen bg-gray-50 flex flex-col relative pb-20 shadow-xl">
         <header class="bg-blue-600 text-white p-4 flex justify-between items-center sticky top-0 z-20 shadow-md">
-            <h1 class="text-xl font-bold">🏸 NoNameNext</h1>
-            <div>
-                <button v-if="!isLoggedIn" @click="showLogin = true" class="text-sm bg-white text-blue-600 px-3 py-1 rounded-full font-semibold">Login</button>
-                <div v-else class="flex items-center gap-2">
-                    <span class="text-sm bg-blue-700 px-2 py-1 rounded">Admin</span>
-                    <button @click="logout" class="text-sm underline">Logout</button>
+            <h1 class="text-xl font-bold tracking-wide">🏸 NoNameNext</h1>
+            
+            <!-- ส่วนของ User Menu -->
+            <div class="relative">
+                <a v-if="!isLoggedIn" href="/u/" class="text-sm bg-white text-blue-600 px-4 py-1.5 rounded-full font-bold shadow hover:bg-blue-50 transition-colors">
+                    Login
+                </a>
+                <div v-else>
+                    <button @click.stop="toggleUserMenu" class="flex items-center gap-2 text-sm bg-blue-700 hover:bg-blue-800 px-3 py-1.5 rounded-lg transition-colors border border-blue-500/30 shadow-sm">
+                        <i data-lucide="user-circle" class="w-5 h-5 text-blue-200"></i>
+                        <span class="font-semibold">{{ username }}</span>
+                        <i data-lucide="chevron-down" class="w-4 h-4 transition-transform text-blue-200" :class="{'rotate-180': showUserMenu}"></i>
+                    </button>
+                    
+                    <!-- Dropdown Content -->
+                    <div v-if="showUserMenu" class="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl py-2 z-30 border border-gray-100 text-gray-800 overflow-hidden transform origin-top-right transition-all">
+                        <a href="/u/" class="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition-colors">
+                            <i data-lucide="user" class="w-4 h-4 text-gray-500"></i>
+                            <span class="font-medium text-sm">จัดการระบบ (Profile)</span>
+                        </a>
+                        <button @click="handleLogout" class="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-red-50 text-red-600 transition-colors border-t border-gray-100">
+                            <i data-lucide="log-out" class="w-4 h-4"></i>
+                            <span class="font-medium text-sm">ออกจากระบบ</span>
+                        </button>
+                    </div>
                 </div>
             </div>
         </header>
@@ -53,7 +72,7 @@
                     <button @click="undoMatches" :disabled="isSaving" class="bg-orange-500 text-white px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 shadow"><i data-lucide="undo-2" class="w-4 h-4"></i> Undo</button>
                 </div>
 				
-                <!-- Blank State (แสดงเมื่อไม่มีข้อมูล Match ใดๆ เลย) -->
+                <!-- Blank State -->
                 <div v-if="isMatchesEmpty" class="flex flex-col items-center justify-center py-12 px-4 opacity-80">
                     <div class="bg-gray-200 rounded-full p-5 mb-4 shadow-inner">
                         <i data-lucide="users" class="w-12 h-12 text-gray-400"></i>
@@ -272,23 +291,6 @@
                 <button @click="saveEditPlayerModal" class="w-full mt-4 p-3 bg-gray-800 text-white rounded-lg font-semibold text-sm">บันทึก & ปิดหน้าต่าง</button>
             </div>
         </div>
-
-        <div v-if="showLogin" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-            <div class="bg-white rounded-xl p-6 w-full max-w-sm shadow-2xl">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-xl font-bold">เข้าสู่ระบบ Admin</h2>
-                    <button @click="showLogin = false" class="p-1 hover:bg-gray-100 rounded-full transition-colors"><i data-lucide="x" class="text-gray-500 w-5 h-5"></i></button>
-                </div>
-                <form @submit.prevent="login">
-                    <input type="text" v-model="loginForm.username" placeholder="Username" class="w-full border rounded p-3 mb-3">
-                    <input type="password" v-model="loginForm.password" placeholder="Password" class="w-full border rounded p-3 mb-4">
-                    <div class="flex gap-2">
-                        <button type="button" @click="showLogin = false" class="flex-1 p-3 bg-gray-200 rounded font-semibold">ยกเลิก</button>
-                        <button type="submit" class="flex-1 p-3 bg-blue-600 text-white rounded font-semibold">Login</button>
-                    </div>
-                </form>
-            </div>
-        </div>
     </div>
 
     <script>
@@ -367,8 +369,6 @@
 						name,
 						count: getPlayerPlayCount(name),
 					});
-					
-					console.log('props.players', props.players)
                     
                     return {
                         suggest: props.players.suggest.filter(filterFn).map(mapFn),
@@ -388,10 +388,12 @@
         const app = createApp({
             setup() {
                 const isLoggedIn = ref(false);
-                const showLogin = ref(false);
                 const isSaving = ref(false);
                 const activeTab = ref('queue'); 
-                const loginForm = ref({ username: '', password: '' });
+                
+                // User Menu State
+                const showUserMenu = ref(false);
+                const username = ref('');
 
                 const matches = ref([]);
                 const players = ref([]);
@@ -411,10 +413,8 @@
 
                 const getEmptyMatch = () => ({ p1:'', p2:'', p3:'', p4:'', status:'queue', result:'no-data', shuttles:'' });
 
-                // เช็กเงื่อนไขว่า Matches ว่างเปล่าหรือไม่ (เพื่อโชว์ Blank State)
                 const isMatchesEmpty = computed(() => {
                     if (matches.value.length === 0) return true;
-                    // หาก Admin ล็อกอินอยู่ จะมีแถวว่างๆ เกิดขึ้นมา 1 แถวเสมอ ให้ถือว่ายังเป็น Blank State
                     if (matches.value.length === 1) {
                         const m = matches.value[0];
                         if (!m.p1.trim() && !m.p2.trim() && !m.p3.trim() && !m.p4.trim() && m.status === 'queue') {
@@ -424,7 +424,7 @@
                     return false;
                 });
 
-                const isAnyModalOpen = computed(() => showMatchModal.value || showAddPlayerModal.value || showEditPlayerModal.value || showLogin.value);
+                const isAnyModalOpen = computed(() => showMatchModal.value || showAddPlayerModal.value || showEditPlayerModal.value);
 
                 watch(isAnyModalOpen, (newVal, oldVal) => {
                     if (newVal) {
@@ -443,7 +443,6 @@
                     showMatchModal.value = false;
                     showAddPlayerModal.value = false;
                     showEditPlayerModal.value = false;
-                    showLogin.value = false;
                 };
 
                 const setFocusName = (name) => { focusedName.value = name ? name.trim().toLowerCase() : ''; };
@@ -484,29 +483,27 @@
                     try {
                         const res = await api.get('/auth/me');
                         isLoggedIn.value = res.data.logged_in;
+                        if (res.data.logged_in) {
+                            username.value = res.data.username;
+                        }
                     } catch (error) {
                         isLoggedIn.value = false;
                     }
                 };
 
-                const login = async () => { 
-                    try {
-                        const res = await api.post('/auth/login', loginForm.value);
-                        if (res.data.success) {
-                            isLoggedIn.value = true;
-                            showLogin.value = false;
-                            loginForm.value = { username: '', password: '' };
-                            await fetchAll();
-                        }
-                    } catch (error) {
-                        alert('รหัสผ่านไม่ถูกต้อง');
+                const toggleUserMenu = () => {
+                    showUserMenu.value = !showUserMenu.value;
+                    if (showUserMenu.value) {
+                        nextTick(() => lucide.createIcons());
                     }
                 };
 
-                const logout = async () => { 
+                const handleLogout = async () => {
+                    showUserMenu.value = false;
                     try {
                         await api.post('/auth/logout');
                         isLoggedIn.value = false;
+                        username.value = '';
                         matches.value = matches.value.filter(m => m.p1.trim() || m.p2.trim() || m.p3.trim() || m.p4.trim());
                     } catch (error) {
                         console.error('Logout error', error);
@@ -699,20 +696,26 @@
                     await checkAuth();
                     await fetchAll();
 
+                    // ซ่อนเมนู User เมื่อคลิกพื้นที่อื่นบนหน้าจอ
+                    document.addEventListener('click', () => {
+                        showUserMenu.value = false;
+                    });
+
                     window.addEventListener('popstate', () => {
                         closeAllModals(); 
                     });
                 });
 
                 return {
-                    isLoggedIn, showLogin, loginForm, isSaving, activeTab,
+                    isLoggedIn, isSaving, activeTab,
+                    showUserMenu, username, toggleUserMenu, handleLogout,
                     matches, players, billingData, isMatchesEmpty,
                     showMatchModal, editingMatchIndex, editingMatch, openMatchModal, saveMatchModal, translateResult,
                     showAddPlayerModal, newPlayerName, newPlayerNote, addPlayer,
                     showEditPlayerModal, editingPlayer, openPlayerModal, saveEditPlayerModal, togglePlayerStatus, deletePlayer,
                     getPlayerCount, getPlayerPlayCount, getPlayerShuttleCount, suggestedPlayers, saveMatches,
                     setFocusName, clearFocusName, isHighlighted, getTeamBgClass,
-                    fetchBilling, markAsPaid, login, logout, undoMatches
+                    fetchBilling, markAsPaid, undoMatches
                 };
             }
         });
