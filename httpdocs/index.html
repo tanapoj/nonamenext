@@ -256,8 +256,23 @@
                     <h2 class="text-lg font-bold">เพิ่มผู้เล่นใหม่</h2>
                     <button @click="showAddPlayerModal = false" class="p-1 hover:bg-gray-100 rounded-full transition-colors"><i data-lucide="x" class="text-gray-500 w-5 h-5"></i></button>
                 </div>
-                <input type="text" v-model="newPlayerName" placeholder="พิมพ์ชื่อผู้เล่น..." class="w-full border rounded p-3 mb-2 focus:ring-2 focus:ring-blue-400 outline-none">
+                
+                <!-- Autocomplete สำหรับกรอกชื่อผู้เล่นใหม่ -->
+                <div class="relative w-full mb-2">
+                    <input type="text" v-model="newPlayerName" @focus="showAddPlayerDropdown = true" @blur="showAddPlayerDropdown = false" placeholder="พิมพ์ค้นหาหรือกรอกชื่อผู้เล่นใหม่..." class="w-full border rounded p-3 focus:ring-2 focus:ring-blue-400 outline-none">
+                    
+                    <div v-if="showAddPlayerDropdown && filteredDirectory.length > 0" class="absolute z-50 w-full mt-1 bg-white border rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                        <ul>
+                            <!-- ใช้ mousedown.prevent เพื่อกัน Input เสียโฟกัสเวลาจิ้มเลือกชื่อ -->
+                            <li v-for="name in filteredDirectory" :key="name" @mousedown.prevent="selectAddPlayer(name)" class="p-3 text-sm hover:bg-blue-50 cursor-pointer border-b border-gray-50 font-medium text-gray-700">
+                                {{ name }}
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
                 <input type="text" v-model="newPlayerNote" placeholder="หมายเหตุ (เช่น 19:00, มาสาย)" @keyup.enter="addPlayer" class="w-full border rounded p-3 mb-4 focus:ring-2 focus:ring-blue-400 outline-none">
+                
                 <div class="flex gap-2">
                     <button @click="showAddPlayerModal = false" class="flex-1 p-2 bg-gray-200 rounded font-semibold text-sm">ยกเลิก</button>
                     <button @click="addPlayer" class="flex-1 p-2 bg-blue-600 text-white rounded font-semibold text-sm">เพิ่มรายชื่อ</button>
@@ -400,6 +415,10 @@
                 const billingData = ref({ billing: [], max_cols: 8 });
                 const focusedName = ref('');
 
+                // User Directory สำหรับ Add Player Autocomplete
+                const userDirectory = ref([]);
+                const showAddPlayerDropdown = ref(false);
+
                 const showMatchModal = ref(false);
                 const editingMatchIndex = ref(-1);
                 const editingMatch = ref({});
@@ -479,12 +498,24 @@
                     return count;
                 };
 
+                // โหลดรายชื่อจาก API ลง Directory
+                const fetchUserDirectory = async () => {
+                    if (!isLoggedIn.value) return;
+                    try {
+                        const res = await api.get('/players');
+                        userDirectory.value = (res.data.users || []).map(u => u.displayName);
+                    } catch (error) {
+                        console.error('Error fetching user directory:', error);
+                    }
+                };
+
                 const checkAuth = async () => { 
                     try {
                         const res = await api.get('/auth/me');
                         isLoggedIn.value = res.data.logged_in;
                         if (res.data.logged_in) {
                             username.value = res.data.username;
+                            fetchUserDirectory(); // โหลด Directory เมื่อล็อกอินผ่าน
                         }
                     } catch (error) {
                         isLoggedIn.value = false;
@@ -616,6 +647,19 @@
                     return { suggest, other };
                 });
 
+                // --- ส่วนควบคุม Filter ของกล่อง Add Player Modal ---
+                const filteredDirectory = computed(() => {
+                    const term = newPlayerName.value.trim().toLowerCase();
+                    if (!term) return userDirectory.value;
+                    return userDirectory.value.filter(n => n.toLowerCase().includes(term));
+                });
+
+                const selectAddPlayer = (name) => {
+                    newPlayerName.value = name;
+                    showAddPlayerDropdown.value = false;
+                };
+                // ---------------------------------------------
+
                 const addPlayer = () => {
                     if(!newPlayerName.value.trim()) return;
                     players.value.push({ 
@@ -712,6 +756,7 @@
                     matches, players, billingData, isMatchesEmpty,
                     showMatchModal, editingMatchIndex, editingMatch, openMatchModal, saveMatchModal, translateResult,
                     showAddPlayerModal, newPlayerName, newPlayerNote, addPlayer,
+                    userDirectory, showAddPlayerDropdown, filteredDirectory, selectAddPlayer, // ส่งตัวแปร Filter ไปให้ HTML ใช้
                     showEditPlayerModal, editingPlayer, openPlayerModal, saveEditPlayerModal, togglePlayerStatus, deletePlayer,
                     getPlayerCount, getPlayerPlayCount, getPlayerShuttleCount, suggestedPlayers, saveMatches,
                     setFocusName, clearFocusName, isHighlighted, getTeamBgClass,

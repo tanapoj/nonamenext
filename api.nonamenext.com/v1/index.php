@@ -156,6 +156,21 @@ $app->post('/matches/undo', function() {
 });
 
 // --- PLAYERS ---
+$app->get('/players', function() {
+    $user = getUser();
+    if (!$user) return res_json(['error' => 'Unauthorized'], 401);
+
+    $db = getDB();
+    // ดึงเฉพาะคนที่มี displayName ไม่เป็นค่าว่าง และไม่ใช่ค่า Default
+    $stmt = $db->query("SELECT id, username, role, displayName FROM users WHERE displayName IS NOT NULL AND displayName != '' AND displayName != '---' ORDER BY displayName ASC");
+    $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // แปลง Array จากรูปแบบ [["displayName" => "A"], ["displayName" => "B"]] เป็น ["A", "B"]
+    // $names = array_column($users, 'displayName');
+    
+    return res_json(['users' => $users]);
+});
+
 $app->get('/players/today', function() {
 	$player_data = get_today_players_data();
 	usort($player_data, function($a, $b){
